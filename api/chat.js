@@ -64,6 +64,7 @@ async function* streamOpenRouter(apiKey, body) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Expose-Headers', 'X-Policy-Ids')
   if (req.method === 'OPTIONS') { res.status(200).end(); return }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return }
 
