@@ -7,6 +7,7 @@
 - `GET /api/config` — 사용 가능한 모델 목록, 기본 모델, 키 설정 여부(`hasKey`)
 - `POST /api/chat` — `{ messages: [{role, content}], model? }` 를 받아 답변을 스트리밍으로 반환. 응답 헤더 `X-Policy-Ids`에 추천 정책 id 배열(JSON)을 담아준다.
 - `GET /api/usage` — 사용량 대시보드는 미구현(항상 503). 구글시트 연동 없이 단순하게 운영하기 위한 의도적인 생략.
+- `POST /api/moderate` — `{ title, background, content, expectedEffect, existingProposals: [{id, title}] }` 를 받아 정책제안 글의 욕설/부적절한 표현 여부와, 기존 제안 목록 중 유사한 항목을 JSON으로 반환. `{ profanity, profanityReason, similar: [{id, title, reason}] }`
 
 ## 동작 방식
 

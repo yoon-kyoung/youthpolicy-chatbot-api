@@ -1,0 +1,74 @@
+const OPENAI_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free'
+
+const SYSTEM_PROMPT = `당신은 "청년ON" 정책제안 게시판의 검수 AI입니다. 사용자가 작성한 정책 제안 글을 검토합니다.
+반드시 아래 JSON 형식으로만 답하세요. 다른 설명, 인사말, 코드블록 표시는 절대 추가하지 마세요.
+
+{"profanity": boolean, "profanityReason": string, "similar": [{"id": "string", "title": "string", "reason": "string"}]}
+
+규칙:
+- profanity: 욕설·비속어·혐오 표현·명백한 도배 또는 정책 제안과 무관한 장난성 텍스트가 있으면 true, 없으면 false.
+- profanityReason: profanity가 true일 때만 어떤 부분이 문제인지 한국어로 한 문장으로 설명. false면 빈 문자열("").
+- similar: [기존 제안 목록] 중 이번 제안과 주제·요구사항이 실질적으로 겹치는 항목만 최대 3개 골라 id와 title을 목록에 있는 그대로 옮기고, reason에 왜 비슷한지 한 문장으로 설명. 겹치는 항목이 없으면 빈 배열([]).`
+
+function extractJson(raw) {
+  const match = raw.match(/\{[\s\S]*\}/)
+  try { return JSON.parse(match ? match[0] : raw) } catch { return null }
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  if (req.method === 'OPTIONS') { res.status(200).end(); return }
+  if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return }
+
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) { res.status(503).json({ error: 'no-key' }); return }
+
+  const { title = '', background = '', content = '', expectedEffect = '', existingProposals = [] } = req.body || {}
+
+  const proposalText = `제목: ${title}\n배경: ${background}\n제안내용: ${content}\n기대효과: ${expectedEffect}`
+  const existingList = (Array.isArray(existingProposals) ? existingProposals : [])
+    .slice(0, 60)
+    .map((p) => `- id:${p.id} title:${p.title}`)
+    .join('\n')
+  const userPrompt = `[검토할 제안]\n${proposalText}\n\n[기존 제안 목록]\n${existingList || '(없음)'}`
+
+  try {
+    const r = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://yoon-kyoung.github.io/youthpolicy_contest/',
+        'X-Title': 'Youth Policy Proposal Moderation',
+      },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0,
+      }),
+    })
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}))
+      throw Object.assign(new Error(data?.error?.message || `OpenRouter ${r.status}`), { status: r.status })
+    }
+    const data = await r.json()
+    const raw = data.choices?.[0]?.message?.content || ''
+    const result = extractJson(raw)
+
+    if (!result || typeof result.profanity !== 'boolean') {
+      res.status(200).json({ profanity: false, profanityReason: '', similar: [] })
+      return
+    }
+    res.status(200).json({
+      profanity: !!result.profanity,
+      profanityReason: result.profanityReason || '',
+      similar: Array.isArray(result.similar) ? result.similar.slice(0, 3) : [],
+    })
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) })
+  }
+}
