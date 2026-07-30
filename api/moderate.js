@@ -1,6 +1,18 @@
 const OPENAI_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free'
 
+// 무료 모델은 한국어 욕설 판별 신뢰도가 낮아, 명백한 욕설은 키워드로 먼저 걸러내고
+// AI는 애매한 표현(혐오·비하·도배성 텍스트)과 유사 정책 판단에만 사용한다.
+const PROFANITY_PATTERNS = [
+  /씨\s*[0-9]*\s*발/, /시\s*[0-9]*\s*발/, /병\s*신/, /개\s*새\s*끼/, /새\s*끼/,
+  /좆/, /좇/, /지\s*랄/, /미친\s*(놈|년|새끼)/, /걸레/, /창\s*녀/,
+  /닥\s*쳐/, /뒤\s*[져질]/, /꺼\s*져/, /좇\s*까/, /엠병/, /뻐큐/,
+  /\bfuck\b/i, /\bshit\b/i, /\bbitch\b/i,
+]
+function hasProfanity(text) {
+  return PROFANITY_PATTERNS.some((re) => re.test(text))
+}
+
 const SYSTEM_PROMPT = `당신은 "청년ON" 정책제안 게시판의 검수 AI입니다. 사용자가 작성한 정책 제안 글을 검토합니다.
 반드시 아래 JSON 형식으로만 답하세요. 다른 설명, 인사말, 코드블록 표시는 절대 추가하지 마세요.
 
@@ -32,6 +44,12 @@ export default async function handler(req, res) {
     .map((p) => `- id:${p.id} title:${p.title}`)
     .join('\n')
   const userPrompt = `[검토할 제안]\n${proposalText}\n\n[기존 제안 목록]\n${existingList || '(없음)'}`
+
+  const keywordHit = hasProfanity(`${title} ${background} ${content} ${expectedEffect}`)
+  if (keywordHit) {
+    res.status(200).json({ profanity: true, profanityReason: '욕설 또는 비속어가 포함되어 있어요.', similar: [] })
+    return
+  }
 
   try {
     const r = await fetch(OPENAI_URL, {
