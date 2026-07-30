@@ -45,8 +45,8 @@ export default async function handler(req, res) {
     .join('\n')
   const userPrompt = `[검토할 제안]\n${proposalText}\n\n[기존 제안 목록]\n${existingList || '(없음)'}`
 
-  const keywordHit = hasProfanity(`${title} ${background} ${content} ${expectedEffect}`)
-  if (keywordHit) {
+  const combinedText = `${title} ${background} ${content} ${expectedEffect}`
+  if (hasProfanity(combinedText)) {
     res.status(200).json({ profanity: true, profanityReason: '욕설 또는 비속어가 포함되어 있어요.', similar: [] })
     return
   }
