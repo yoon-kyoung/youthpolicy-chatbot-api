@@ -1,5 +1,5 @@
 import { recommendPolicies } from '../lib/policies.js'
-import { extractParams } from '../lib/extract.js'
+import { extractParamsLLM } from '../lib/extract.js'
 
 // OpenRouter: OpenAI 호환 API. :free 모델은 카드 등록 없이 무료로 쓸 수 있다.
 // Solar Pro 3(Upstage)는 이 OpenRouter 계정에 무료 크레딧이 연결돼 있어 기본 모델로 사용한다.
@@ -8,7 +8,7 @@ const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'upstage/solar-pro-3'
 
 const BASE_PROMPT = `당신은 "청년ON"의 AI 챗봇입니다. 대한민국 청년정책(취업·주거·금융·교육·복지·참여 등)을 안내합니다.
 - 반드시 한국어로만 답변하세요. 영어·태국어·아랍어 등 다른 언어 단어를 절대 섞지 마세요.
-- 실제 정책 데이터에 없는 내용을 지어내지 마세요.
+- 마감일·신청방법·필요서류·신청링크처럼 구체적인 정보는 반드시 아래 후보 정책 JSON에 있는 값 그대로만 답하세요. 그 값이 "정보 없음"이거나 필드 자체가 없으면 지어내지 말고 모른다고 솔직히 답하세요.
 - 간결하게 답하세요.
 - 답변 끝에 후속 질문을 제안할 땐 반드시 아래 형식을 쓰세요(없으면 생략 가능):
 💬 이어서 물어보세요
@@ -16,11 +16,20 @@ const BASE_PROMPT = `당신은 "청년ON"의 AI 챗봇입니다. 대한민국 �
 · 질문2`
 
 function compactPolicy(p) {
+  const age = p.minAge != null || p.maxAge != null
+    ? `만 ${p.minAge ?? 0}~${p.maxAge ?? '제한없음'}세`
+    : '연령 제한 없음'
   return {
+    id: p.id,
     name: p.name,
     category: p.category,
-    summary: (p.summary || '').slice(0, 80),
+    ageRange: age,
     region: p.nationwide ? '전국' : (p.regions || []).join('/'),
+    deadline: p.period || '상시 접수',
+    support: (p.supportSummary || p.support || p.summary || '').slice(0, 200) || '정보 없음',
+    applyMethod: (p.applyMethod || '').slice(0, 200) || '정보 없음',
+    submitDocs: (p.submitDocs || '').slice(0, 150) || '정보 없음',
+    applyUrl: p.applyUrl || p.refUrl || '',
   }
 }
 
@@ -76,7 +85,7 @@ export default async function handler(req, res) {
   const useModel = model || DEFAULT_MODEL
 
   const allUserText = messages.filter((m) => m.role === 'user').map((m) => m.content).join(' ')
-  const params = extractParams(allUserText)
+  const params = await extractParamsLLM({ apiKey, model: DEFAULT_MODEL, text: allUserText })
   const hasEnoughInfo = params.age != null || params.region != null || params.fields.length > 0
 
   let systemPrompt = BASE_PROMPT
@@ -87,8 +96,8 @@ export default async function handler(req, res) {
       const candidates = await recommendPolicies(params)
       policyIds = candidates.slice(0, 6).map((p) => p.id)
       systemPrompt += `\n\n파악된 조건 — 나이: ${params.age ?? '미상'}, 지역: ${params.region ?? '미상'}, 관심분야: ${params.fields.join(',') || '미상'}
-아래는 조건에 맞는 후보 정책 목록(JSON)입니다. 이 중 실제로 적합한 것만 최대 5개 골라 이름과 핵심 내용을 자연스러운 한국어로 요약해 추천하세요. 후보가 비어있으면 조건에 맞는 정책이 없다고 솔직히 답하세요.
-${JSON.stringify(candidates.slice(0, 8).map(compactPolicy))}`
+아래는 조건에 맞는 후보 정책 목록(JSON)입니다. 이 중 실제로 적합한 것만 최대 5개 골라 이름과 핵심 내용을 자연스러운 한국어로 요약해 추천하세요. 각 항목의 ageRange·region·deadline·support·applyMethod·submitDocs·applyUrl 값만 근거로 답하세요. 후보가 비어있으면 조건에 맞는 정책이 없다고 솔직히 답하세요.
+${JSON.stringify(candidates.slice(0, 6).map(compactPolicy))}`
     } else {
       systemPrompt += `\n\n아직 나이·지역·관심분야를 모릅니다. 정책 추천 요청이면 먼저 되물어보세요. 인사/잡담 등 정책과 무관한 질문에는 바로 답하세요.`
     }
