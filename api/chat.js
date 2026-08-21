@@ -110,6 +110,7 @@ ${JSON.stringify(candidates.slice(0, 6).map(compactPolicy))}`
       model: useModel,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature: 0.3,
+      max_tokens: 1024,
     })) {
       wrote = true
       res.write(delta)
