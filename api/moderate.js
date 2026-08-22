@@ -93,11 +93,25 @@ export default async function handler(req, res) {
 
   const result = await callAi(apiKey, userPrompt)
   const aiAvailable = !!result
-  const score = (result && typeof result.profanityScore === 'number')
+
+  if (!aiAvailable) {
+    // AI 응답이 없으면 도배/무의미 텍스트를 전혀 판별할 수 없으므로, 통과시키지 말고 재검토를 요구한다.
+    res.status(200).json({
+      profanity: null,
+      profanityScore: null,
+      profanityReason: '',
+      similar: [],
+      aiAvailable: false,
+      retryable: true,
+    })
+    return
+  }
+
+  const score = typeof result.profanityScore === 'number'
     ? Math.max(0, Math.min(100, Math.round(result.profanityScore)))
     : 0
   const profanity = score >= 70
-  const similar = (result && Array.isArray(result.similar)) ? result.similar.slice(0, 3) : []
+  const similar = Array.isArray(result.similar) ? result.similar.slice(0, 3) : []
 
   res.status(200).json({
     profanity,
