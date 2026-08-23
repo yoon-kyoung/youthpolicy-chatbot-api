@@ -1,10 +1,9 @@
 import { recommendPolicies } from '../lib/policies.js'
 import { extractParamsLLM } from '../lib/extract.js'
 
-// OpenRouter: OpenAI 호환 API. :free 모델은 카드 등록 없이 무료로 쓸 수 있다.
-// Solar Pro 3(Upstage)는 이 OpenRouter 계정에 무료 크레딧이 연결돼 있어 기본 모델로 사용한다.
-const OPENAI_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'upstage/solar-pro-3'
+// Upstage Solar API: OpenAI 호환 채팅 완성 엔드포인트. OpenRouter를 거치지 않고 직접 호출한다.
+const OPENAI_URL = 'https://api.upstage.ai/v1/chat/completions'
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'solar-pro3'
 
 const BASE_PROMPT = `당신은 "청년ON"의 AI 챗봇입니다. 대한민국 청년정책(취업·주거·금융·교육·복지·참여 등)을 안내합니다.
 - 반드시 한국어로만 답변하세요. 영어·태국어·아랍어 등 다른 언어 단어를 절대 섞지 마세요.
@@ -33,20 +32,18 @@ function compactPolicy(p) {
   }
 }
 
-async function* streamOpenRouter(apiKey, body) {
+async function* streamUpstage(apiKey, body) {
   const r = await fetch(OPENAI_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://yoon-kyoung.github.io/youthpolicy_contest/',
-      'X-Title': 'Youth Policy Chatbot',
     },
     body: JSON.stringify({ ...body, stream: true }),
   })
   if (!r.ok || !r.body) {
     const data = await r.json().catch(() => ({}))
-    throw Object.assign(new Error(data?.error?.message || `OpenRouter ${r.status}`), { status: r.status })
+    throw Object.assign(new Error(data?.error?.message || `Upstage ${r.status}`), { status: r.status })
   }
 
   const reader = r.body.getReader()
@@ -78,7 +75,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return }
 
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = process.env.UPSTAGE_API_KEY
   if (!apiKey) { res.status(503).json({ error: 'no-key' }); return }
 
   const { messages = [], model } = req.body || {}
@@ -106,7 +103,7 @@ ${JSON.stringify(candidates.slice(0, 6).map(compactPolicy))}`
     res.setHeader('X-Policy-Ids', JSON.stringify(policyIds))
 
     let wrote = false
-    for await (const delta of streamOpenRouter(apiKey, {
+    for await (const delta of streamUpstage(apiKey, {
       model: useModel,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature: 0.3,
