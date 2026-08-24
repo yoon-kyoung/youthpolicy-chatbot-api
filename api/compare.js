@@ -1,5 +1,6 @@
-const OPENAI_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free'
+// Upstage Solar API: OpenAI 호환 채팅 완성 엔드포인트. OpenRouter를 거치지 않고 직접 호출한다.
+const OPENAI_URL = 'https://api.upstage.ai/v1/chat/completions'
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'solar-pro3'
 const AI_TIMEOUT_MS = 20000
 
 const SYSTEM_PROMPT = `당신은 "청년ON"의 정책 비교 도우미입니다. 사용자가 나란히 비교 중인 2~3개의 청년정책 정보를 받아 실질적인 차이점을 짚어줍니다.
@@ -32,8 +33,6 @@ async function callAi(apiKey, userPrompt) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://yoon-kyoung.github.io/youthpolicy_contest/',
-        'X-Title': 'Youth Policy Comparison',
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
@@ -61,7 +60,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return }
 
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = process.env.UPSTAGE_API_KEY
   if (!apiKey) { res.status(503).json({ error: 'no-key' }); return }
 
   const { policies = [] } = req.body || {}
