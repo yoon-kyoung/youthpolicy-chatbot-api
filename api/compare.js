@@ -1,7 +1,7 @@
 // Upstage Solar API: OpenAI 호환 채팅 완성 엔드포인트. OpenRouter를 거치지 않고 직접 호출한다.
 const OPENAI_URL = 'https://api.upstage.ai/v1/chat/completions'
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'solar-pro3'
-const AI_TIMEOUT_MS = 20000
+const AI_TIMEOUT_MS = 13000
 
 const SYSTEM_PROMPT = `당신은 "청년ON"의 정책 비교 도우미입니다. 사용자가 나란히 비교 중인 2~3개의 청년정책 정보를 받아 실질적인 차이점을 짚어줍니다.
 [비교할 정책들]에는 각 정책이 "정책 A", "정책 B"(있다면 "정책 C") 라는 라벨로 주어집니다.
@@ -24,7 +24,7 @@ function extractJson(raw) {
   try { return JSON.parse(match ? match[0] : raw) } catch { return null }
 }
 
-async function callAi(apiKey, userPrompt) {
+async function callAiOnce(apiKey, userPrompt) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS)
   try {
@@ -44,15 +44,30 @@ async function callAi(apiKey, userPrompt) {
       }),
       signal: controller.signal,
     })
-    if (!r.ok) return null
+    if (!r.ok) {
+      const body = await r.text().catch(() => '')
+      console.error(`[compare] Upstage ${r.status}: ${body.slice(0, 300)}`)
+      return null
+    }
     const data = await r.json()
     const raw = data.choices?.[0]?.message?.content || ''
-    return extractJson(raw)
-  } catch {
+    const parsed = extractJson(raw)
+    if (!parsed) console.error(`[compare] JSON 파싱 실패, raw: ${raw.slice(0, 300)}`)
+    return parsed
+  } catch (e) {
+    console.error(`[compare] 요청 실패: ${e?.name || ''} ${e?.message || e}`)
     return null
   } finally {
     clearTimeout(timer)
   }
+}
+
+// 무료/과금 API 모두 가끔 타임아웃·형식 오류가 나므로, 사용자가 재시도 버튼을
+// 누르지 않아도 되도록 서버에서 한 번 자동 재시도한다.
+async function callAi(apiKey, userPrompt) {
+  const first = await callAiOnce(apiKey, userPrompt)
+  if (first) return first
+  return callAiOnce(apiKey, userPrompt)
 }
 
 export default async function handler(req, res) {
