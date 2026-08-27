@@ -8,6 +8,7 @@
 - `POST /api/chat` — `{ messages: [{role, content}], model? }` 를 받아 답변을 스트리밍으로 반환. 응답 헤더 `X-Policy-Ids`에 추천 정책 id 배열(JSON)을 담아준다.
 - `GET /api/usage` — 사용량 대시보드는 미구현(항상 503). 구글시트 연동 없이 단순하게 운영하기 위한 의도적인 생략.
 - `POST /api/moderate` — `{ title, background, content, expectedEffect, existingProposals: [{id, title}] }` 를 받아 정책제안 글의 욕설/부적절한 표현 여부와, 기존 제안 목록 중 유사한 항목을 JSON으로 반환. `{ profanity, profanityReason, similar: [{id, title, reason}] }`. `/api/chat`·`/api/config`와 동일하게 Upstage Solar API를 직접 호출한다(과거엔 OpenRouter의 무료 Nemotron 모델을 썼으나, 해당 모델 id가 카탈로그에서 내려가면서 기능이 계속 실패해 Solar로 교체).
+- `POST /api/compare` — `{ policies: [{title, category, region, org, target, amount, deadline, support}, ...] }` (2~3개)를 받아 정책 간 실질적 차이점과 상황별 추천을 JSON으로 반환. `{ points: [{aspect, detail}], recommendation, labels: [{label, title}], aiAvailable }`. 이것도 Upstage Solar API를 직접 호출한다. 제목이 한글 깨짐 없이 안전하게 전달되도록 AI에게는 "정책 A/B/C" 라벨만 주고, 라벨-제목 매핑은 프론트에서 붙인다.
 
 ## 동작 방식
 
@@ -17,10 +18,10 @@
 
 ## 환경 변수
 
-- `UPSTAGE_API_KEY` (필수, `/api/chat`·`/api/config`·`/api/moderate`용) — https://console.upstage.ai/api-keys 에서 발급.
-- `OPENROUTER_API_KEY` (필수, `/api/compare`용) — https://openrouter.ai/keys 에서 발급. 정책 비교 기능은 여전히 OpenRouter/Nemotron을 사용한다.
-- `DEFAULT_MODEL` (선택) — `/api/chat`·`/api/config`·`/api/moderate`가 공통으로 쓰는 기본 모델. 기본값 `solar-pro3`.
+- `UPSTAGE_API_KEY` (필수) — 모든 엔드포인트(`/api/chat`·`/api/config`·`/api/moderate`·`/api/compare`)가 공통으로 쓴다. https://console.upstage.ai/api-keys 에서 발급.
+- `DEFAULT_MODEL` (선택) — 위 엔드포인트들이 공통으로 쓰는 기본 모델. 기본값 `solar-pro3`.
 - `POLICIES_URL` (선택) — 정책 데이터 소스. 기본값은 배포된 프론트엔드의 `policies.json`.
+- `OPENROUTER_API_KEY` — 더 이상 코드에서 쓰이지 않는다(과거엔 `/api/moderate`·`/api/compare`가 OpenRouter/Nemotron을 썼으나 둘 다 Solar로 전환 완료). Vercel에 등록만 되어 있고 실제로 참조하는 곳은 없다 — 정리해도 무방.
 
 ## 배포
 
@@ -28,4 +29,4 @@
 vercel --prod
 ```
 
-Vercel 프로젝트 설정의 Environment Variables에서 `UPSTAGE_API_KEY`를 등록해야 한다(`OPENROUTER_API_KEY`는 `/api/compare`를 위해 계속 유지).
+Vercel 프로젝트 설정의 Environment Variables에서 `UPSTAGE_API_KEY`만 있으면 모든 엔드포인트가 동작한다.
