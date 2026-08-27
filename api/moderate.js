@@ -1,12 +1,13 @@
-const OPENAI_URL = 'https://openrouter.ai/api/v1/chat/completions'
-// chat.js/config.js의 DEFAULT_MODEL(Upstage Solar용)과 이름이 겹치면 안 되므로 별도 env var를 쓴다.
-// 과거 'nvidia/nemotron-3-nano-30b-a3b:free'가 OpenRouter 카탈로그에서 내려가면서 검토 기능이
-// 계속 실패하던 문제가 있었음 — 현재 유효한 무료 모델로 교체.
-const DEFAULT_MODEL = process.env.MODERATE_MODEL || 'nvidia/nemotron-3-super-120b-a12b:free'
+// Upstage Solar API를 직접 호출한다(OpenRouter 미경유). chat.js/config.js와 동일한 제공자·모델이라
+// DEFAULT_MODEL env var를 그대로 공유해도 안전하다.
+// (과거 OpenRouter의 무료 Nemotron 모델을 썼는데, 모델 id가 카탈로그에서 내려가면서
+//  검토 기능이 계속 실패했던 이력이 있어 Solar로 교체함)
+const OPENAI_URL = 'https://api.upstage.ai/v1/chat/completions'
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'solar-pro3'
 const AI_TIMEOUT_MS = 20000
 
-// 무료 모델은 한국어 욕설 판별 신뢰도가 낮아, 명백한 욕설은 키워드로 먼저 걸러내고
-// AI는 애매한 표현(혐오·비하·도배성 텍스트) 점수화와 유사 정책 판단에만 사용한다.
+// 명백한 욕설은 AI 호출 없이 키워드로 먼저 걸러내고, AI는 애매한 표현(혐오·비하·도배성 텍스트)
+// 점수화와 유사 정책 판단에만 사용한다.
 const PROFANITY_PATTERNS = [
   /씨\s*[0-9]*\s*발/, /시\s*[0-9]*\s*발/, /병\s*신/, /개\s*새\s*끼/, /새\s*끼/,
   /좆/, /좇/, /지\s*랄/, /미친\s*(놈|년|새끼)/, /걸레/, /창\s*녀/,
@@ -41,8 +42,6 @@ async function callAi(apiKey, userPrompt) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://yoon-kyoung.github.io/youthpolicy_contest/',
-        'X-Title': 'Youth Policy Proposal Moderation',
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
@@ -51,12 +50,13 @@ async function callAi(apiKey, userPrompt) {
           { role: 'user', content: userPrompt },
         ],
         temperature: 0,
+        response_format: { type: 'json_object' },
       }),
       signal: controller.signal,
     })
     if (!r.ok) {
       const errBody = await r.text().catch(() => '')
-      console.error('[moderate] openrouter not ok', r.status, errBody.slice(0, 500))
+      console.error('[moderate] upstage not ok', r.status, errBody.slice(0, 500))
       return null
     }
     const data = await r.json()
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return }
 
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = process.env.UPSTAGE_API_KEY
   if (!apiKey) { res.status(503).json({ error: 'no-key' }); return }
 
   const { title = '', background = '', content = '', expectedEffect = '', existingProposals = [] } = req.body || {}
