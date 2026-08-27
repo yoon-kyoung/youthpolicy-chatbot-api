@@ -1,5 +1,8 @@
 const OPENAI_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free'
+// chat.js/config.js의 DEFAULT_MODEL(Upstage Solar용)과 이름이 겹치면 안 되므로 별도 env var를 쓴다.
+// 과거 'nvidia/nemotron-3-nano-30b-a3b:free'가 OpenRouter 카탈로그에서 내려가면서 검토 기능이
+// 계속 실패하던 문제가 있었음 — 현재 유효한 무료 모델로 교체.
+const DEFAULT_MODEL = process.env.MODERATE_MODEL || 'nvidia/nemotron-3-super-120b-a12b:free'
 const AI_TIMEOUT_MS = 20000
 
 // 무료 모델은 한국어 욕설 판별 신뢰도가 낮아, 명백한 욕설은 키워드로 먼저 걸러내고
