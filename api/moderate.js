@@ -54,11 +54,18 @@ async function callAi(apiKey, userPrompt) {
       }),
       signal: controller.signal,
     })
-    if (!r.ok) return null
+    if (!r.ok) {
+      const errBody = await r.text().catch(() => '')
+      console.error('[moderate] openrouter not ok', r.status, errBody.slice(0, 500))
+      return null
+    }
     const data = await r.json()
     const raw = data.choices?.[0]?.message?.content || ''
-    return extractJson(raw)
-  } catch {
+    const parsed = extractJson(raw)
+    if (!parsed) console.error('[moderate] extractJson failed, raw:', raw.slice(0, 500))
+    return parsed
+  } catch (e) {
+    console.error('[moderate] callAi threw', e?.message || e)
     return null
   } finally {
     clearTimeout(timer)
